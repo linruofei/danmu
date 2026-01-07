@@ -18,11 +18,13 @@ import RenrenSource from "../sources/renren.js";
 import HanjutvSource from "../sources/hanjutv.js";
 import BahamutSource from "../sources/bahamut.js";
 import DandanSource from "../sources/dandan.js";
+import CustomSource from "../sources/custom.js";
 import TencentSource from "../sources/tencent.js";
 import IqiyiSource from "../sources/iqiyi.js";
 import MangoSource from "../sources/mango.js";
 import BilibiliSource from "../sources/bilibili.js";
 import YoukuSource from "../sources/youku.js";
+import SohuSource from "../sources/sohu.js";
 import OtherSource from "../sources/other.js";
 import { Anime, AnimeMatch, Episodes, Bangumi } from "../models/dandan-model.js";
 
@@ -36,11 +38,13 @@ const renrenSource = new RenrenSource();
 const hanjutvSource = new HanjutvSource();
 const bahamutSource = new BahamutSource();
 const dandanSource = new DandanSource();
+const customSource = new CustomSource();
 const tencentSource = new TencentSource();
 const youkuSource = new YoukuSource();
 const iqiyiSource = new IqiyiSource();
 const mangoSource = new MangoSource();
 const bilibiliSource = new BilibiliSource();
+const sohuSource = new SohuSource();
 const otherSource = new OtherSource();
 const doubanSource = new DoubanSource(tencentSource, iqiyiSource, youkuSource, bilibiliSource);
 const tmdbSource = new TmdbSource(doubanSource);
@@ -184,11 +188,13 @@ export async function searchAnime(url, preferAnimeId = null, preferSource = null
       if (source === "hanjutv") return hanjutvSource.search(queryTitle);
       if (source === "bahamut") return bahamutSource.search(queryTitle);
       if (source === "dandan") return dandanSource.search(queryTitle);
+      if (source === "custom") return customSource.search(queryTitle);
       if (source === "tencent") return tencentSource.search(queryTitle);
       if (source === "youku") return youkuSource.search(queryTitle);
       if (source === "iqiyi") return iqiyiSource.search(queryTitle);
       if (source === "imgo") return mangoSource.search(queryTitle);
       if (source === "bilibili") return bilibiliSource.search(queryTitle);
+      if (source === "sohu") return sohuSource.search(queryTitle);
     });
 
     // 执行所有请求并等待结果
@@ -205,8 +211,9 @@ export async function searchAnime(url, preferAnimeId = null, preferSource = null
     // 解构出返回的结果
     const {
       vod: animesVodResults, 360: animes360, tmdb: animesTmdb, douban: animesDouban, renren: animesRenren,
-      hanjutv: animesHanjutv, bahamut: animesBahamut, dandan: animesDandan, tencent: animesTencent, youku: animesYouku,
-      iqiyi: animesIqiyi, imgo: animesImgo, bilibili: animesBilibili
+      hanjutv: animesHanjutv, bahamut: animesBahamut, dandan: animesDandan, custom: animesCustom, 
+      tencent: animesTencent, youku: animesYouku, iqiyi: animesIqiyi, imgo: animesImgo, bilibili: animesBilibili,
+      sohu: animesSohu
     } = resultData;
 
     // 按顺序处理每个来源的结果
@@ -241,6 +248,9 @@ export async function searchAnime(url, preferAnimeId = null, preferSource = null
       } else if (key === 'dandan') {
         // 等待处理弹弹play来源
         await dandanSource.handleAnimes(animesDandan, queryTitle, curAnimes);
+      } else if (key === 'custom') {
+        // 等待处理自定义弹幕源来源
+        await customSource.handleAnimes(animesCustom, queryTitle, curAnimes);
       } else if (key === 'tencent') {
         // 等待处理Tencent来源
         await tencentSource.handleAnimes(animesTencent, queryTitle, curAnimes);
@@ -256,6 +266,9 @@ export async function searchAnime(url, preferAnimeId = null, preferSource = null
       } else if (key === 'bilibili') {
         // 等待处理Bilibili来源
         await bilibiliSource.handleAnimes(animesBilibili, queryTitle, curAnimes);
+      } else if (key === 'sohu') {
+        // 等待处理Sohu来源
+        await sohuSource.handleAnimes(animesSohu, queryTitle, curAnimes);
       }
     }
   } catch (error) {
@@ -408,8 +421,12 @@ async function matchAniAndEp(season, episode, year, searchData, title, req, plat
     // 判断剧集
     const normalizedTitle = normalizeSpaces(title);
     for (const anime of searchData.animes) {
-      if (globals.rememberLastSelect && preferAnimeId && anime.bangumiId.toString() !== preferAnimeId.toString() &&
-          anime.animeId.toString() !== preferAnimeId.toString()) continue;
+      const animeIsPrefer = 
+        globals.rememberLastSelect && 
+        preferAnimeId && 
+        String(anime.bangumiId) !== String(preferAnimeId) && 
+        String(anime.animeId) !== String(preferAnimeId);
+      if (animeIsPrefer) continue;
       if (normalizeSpaces(anime.animeTitle).includes(normalizedTitle)) {
         // 年份匹配优先于季匹配
         if (!matchYear(anime, year)) {
@@ -432,7 +449,7 @@ async function matchAniAndEp(season, episode, year, searchData, title, req, plat
         log("info", "过滤后的集标题", filteredEpisodes.map(episode => episode.episodeTitle));
 
         // 年份匹配通过后，再判断season
-        if (matchSeason(anime, title, season)) {
+        if (matchSeason(anime, title, season) || !animeIsPrefer) {
           // 使用新的集数匹配策略
           const matchedEpisode = findEpisodeByNumber(filteredEpisodes, episode, platform);
           if (matchedEpisode) {
@@ -446,7 +463,12 @@ async function matchAniAndEp(season, episode, year, searchData, title, req, plat
   } else {
     // 判断电影
     for (const anime of searchData.animes) {
-      if (globals.rememberLastSelect && preferAnimeId && anime.bangumiId.toString() !== preferAnimeId.toString()) continue;
+      const animeIsPrefer = 
+        globals.rememberLastSelect && 
+        preferAnimeId && 
+        String(anime.bangumiId) !== String(preferAnimeId) && 
+        String(anime.animeId) !== String(preferAnimeId);
+      if (animeIsPrefer) continue;
       const animeTitle = anime.animeTitle.split("(")[0].trim();
       if (animeTitle === title) {
         // 年份匹配优先
@@ -628,6 +650,15 @@ export async function matchAnime(url, req) {
     log("info", `Parsed cleanFileName: ${cleanFileName}, preferredPlatform: ${preferredPlatform}`);
 
     let {title, season, episode, year} = await extractTitleSeasonEpisode(cleanFileName);
+
+    // 使用剧名映射表转换剧名
+    if (globals.titleMappingTable && globals.titleMappingTable.size > 0) {
+      const mappedTitle = globals.titleMappingTable.get(title);
+      if (mappedTitle) {
+        title = mappedTitle;
+        log("info", `Title mapped from original: ${url.searchParams.get("keyword")} to: ${title}`);
+      }
+    }
 
     // 获取prefer animeIdgetPreferAnimeId
     const [preferAnimeId, preferSource] = getPreferAnimeId(title);
@@ -922,6 +953,8 @@ export async function getComment(path, queryFormat, segmentFlag) {
     danmus = await bilibiliSource.getComments(url, plat, segmentFlag);
   } else if (url.includes('.youku.com')) {
     danmus = await youkuSource.getComments(url, plat, segmentFlag);
+  } else if (url.includes('.sohu.com')) {
+    danmus = await sohuSource.getComments(url, plat, segmentFlag);
   }
 
   // 请求其他平台弹幕
@@ -935,6 +968,8 @@ export async function getComment(path, queryFormat, segmentFlag) {
       danmus = await bahamutSource.getComments(url, plat, segmentFlag);
     } else if (plat === "dandan") {
       danmus = await dandanSource.getComments(url, plat, segmentFlag);
+    } else if (plat === "custom") {
+      danmus = await customSource.getComments(url, plat, segmentFlag);
     }
   }
 
@@ -1018,6 +1053,8 @@ export async function getCommentByUrl(videoUrl, queryFormat, segmentFlag) {
       danmus = await bilibiliSource.getComments(url, "bilibili1", segmentFlag);
     } else if (url.includes('.youku.com')) {
       danmus = await youkuSource.getComments(url, "youku", segmentFlag);
+    } else if (url.includes('.sohu.com')) {
+      danmus = await sohuSource.getComments(url, "sohu", segmentFlag);
     } else {
       // 如果不是已知平台，尝试第三方弹幕服务器
       const urlPattern = /^(https?:\/\/)?([\w.-]+)\.([a-z]{2,})(\/.*)?$/i;
@@ -1097,6 +1134,8 @@ export async function getSegmentComment(segment, queryFormat) {
       danmus = await bilibiliSource.getSegmentComments(segment);
     } else if (platform === "youku") {
       danmus = await youkuSource.getSegmentComments(segment);
+    } else if (platform === "sohu") {
+      danmus = await sohuSource.getSegmentComments(segment);
     } else if (platform === "hanjutv") {
       danmus = await hanjutvSource.getSegmentComments(segment);
     } else if (platform === "bahamut") {
@@ -1105,6 +1144,8 @@ export async function getSegmentComment(segment, queryFormat) {
       danmus = await renrenSource.getSegmentComments(segment);
     } else if (platform === "dandan") {
       danmus = await dandanSource.getSegmentComments(segment);
+    } else if (platform === "custom") {
+      danmus = await customSource.getSegmentComments(segment);
     } else if (platform === "other_server") {
       danmus = await otherSource.getSegmentComments(segment);
     }
