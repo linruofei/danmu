@@ -36,9 +36,10 @@ jobs:
 
             - name: Revert workflows changes
               run: |
+                  rm -rf .github/workflows
                   git checkout origin/main -- .github/workflows || true
-                  git add .github/workflows || true
-                  git commit -m "chore: ignore upstream workflows changes" || echo "No changes to commit"
+                  git add -A .github/workflows
+                  git commit -m "chore: ignore upstream workflow changes" || echo "No workflow changes"
 
             - name: Push to origin
               run: git push origin main
